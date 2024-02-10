@@ -11,9 +11,15 @@ class ViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do any additional setup after loading the view.
+        
+        setup()
     }
-
-
+    
+    private func setup() {
+        configureViews()
+    }
+    
+    private func configureViews() {
+        view.backgroundColor = .systemBackground
+    }
 }
-
