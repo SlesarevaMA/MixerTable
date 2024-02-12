@@ -9,8 +9,10 @@ import UIKit
 
 final class ViewController: UIViewController {
     
+    private var dataSource: UITableViewDiffableDataSource<Int, CellViewModel>!
+    
     private let numbers = Array<Int>(0...30)
-    private lazy var cells = numbers.map { CellViewModel(isCheckmarked: false, title: "\($0)") }
+    private lazy var cellViewModels = numbers.map { CellViewModel(isCheckmarked: false, title: "\($0)") }
     
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
 
@@ -22,8 +24,10 @@ final class ViewController: UIViewController {
     
     private func setup() {
         addSubviews()
-        addConstraint()
+        addConstraints()
         configureViews()
+        configureDataSource()
+        createSnapshot()
     }
     
     private func addSubviews() {
@@ -31,10 +35,10 @@ final class ViewController: UIViewController {
         tableView.translatesAutoresizingMaskIntoConstraints = false
     }
     
-    private func addConstraint() {
+    private func addConstraints() {
         NSLayoutConstraint.activate([
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
@@ -50,57 +54,65 @@ final class ViewController: UIViewController {
         
         tableView.separatorStyle = .singleLine
         tableView.register(TableViewCell.self, forCellReuseIdentifier: "TableViewCell")
-        tableView.dataSource = self
         tableView.delegate = self
     }
     
-    @objc private func shuffleTapped() {
-        cells.shuffle()
-        
-        tableView.reloadData()
-    }
-}
-
-extension ViewController: UITableViewDataSource {
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return cells.count
+    private func createSnapshot() {
+        var snapshot = NSDiffableDataSourceSnapshot<Int, CellViewModel>()
+        snapshot.appendSections([0])
+        snapshot.appendItems(cellViewModels, toSection: 0)
+        dataSource?.apply(snapshot, animatingDifferences: true)
     }
     
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        guard
-            let cell = tableView.dequeueReusableCell(withIdentifier: "TableViewCell", for: indexPath) as? TableViewCell
-        else {
-            return UITableViewCell()
-        }
-        
-        let model = cells[indexPath.row]
-        cell.configure(with: model)
-        
-        return cell
+    private func configureDataSource() {
+        dataSource = UITableViewDiffableDataSource<Int, CellViewModel>(
+            tableView: tableView,
+            cellProvider: { tableView, indexPath, item in
+            
+            guard let cell = tableView.dequeueReusableCell(
+                withIdentifier: "TableViewCell",
+                for: indexPath
+            ) as? TableViewCell 
+                else {
+                return UITableViewCell()
+            }
+            
+            cell.configure(with: item)
+
+            return cell
+        })
+    }
+    
+    @objc private func shuffleTapped() {
+        var snapshot = dataSource.snapshot()
+        let items = snapshot.itemIdentifiers
+        snapshot.deleteItems(items)
+        let newIndeces = items.shuffled()
+        snapshot.appendItems(newIndeces)
+        dataSource.apply(snapshot, animatingDifferences: true)
     }
 }
 
 extension ViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: true)
-
-        guard let cell = tableView.cellForRow(at: indexPath) as? TableViewCell else {
-            return
-        }
         
+        guard let cell = tableView.cellForRow(at: indexPath) as? TableViewCell else { return }
+        tableView.deselectRow(at: indexPath, animated: true)
+        
+        var snapshot = NSDiffableDataSourceSnapshot<Int, CellViewModel>()
+        snapshot.appendSections([0])
+
         if cell.accessoryType == .checkmark {
             cell.accessoryType = .none
-            cells[indexPath.row] = CellViewModel(isCheckmarked: false, title: "\(cells[indexPath.row].title)")
+            cellViewModels[indexPath.row] = CellViewModel(isCheckmarked: false, title: "\(cellViewModels[indexPath.row].title)")
+            snapshot.appendItems(cellViewModels, toSection: 0)
+            dataSource?.apply(snapshot, animatingDifferences: true)
         } else {
             cell.accessoryType = .checkmark
-            let newNumber = CellViewModel(isCheckmarked: true, title: "\(cells[indexPath.row].title)")
+            cellViewModels.insert(cellViewModels.remove(at: indexPath.row), at: 0)
             
-            cells[indexPath.row] = newNumber
-            cell.configure(with: newNumber)
-
-            cells.remove(at: indexPath.row)
-            cells.insert(newNumber, at: 0)
-            tableView.moveRow(at: indexPath, to: IndexPath(row: 0, section: 0))
+            snapshot.appendItems(cellViewModels, toSection: 0)
+            dataSource?.apply(snapshot, animatingDifferences: true)
         }
     }
 }
